@@ -1,76 +1,69 @@
 """
 Problema das N-Rainhas
 =======================
-Implementação usando Busca em Profundidade (DFS) com backtracking.
-
-O tabuleiro é representado como uma lista `posicoes`, onde `posicoes[i]`
-indica a coluna em que a rainha da linha `i` está posicionada.
-Como cada linha tem exatamente uma rainha, já evitamos conflitos de linha
-automaticamente. Resta verificar conflitos de coluna e de diagonais.
-
-A busca em profundidade explora a árvore de estados colocando uma rainha
-por vez, linha após linha. Sempre que uma posição é inválida (conflito),
-o algoritmo "poda" aquele ramo e retrocede (backtrack) para tentar outra
-coluna — não avançando para as linhas seguintes. É esse corte antecipado
-que torna o DFS eficiente para este problema, em vez de gerar todas as
-permutações possíveis e testá-las no final.
+O estado do problema (`NRainhasState`) representa um tabuleiro parcial:
+`posicoes[i]` é a coluna da rainha da linha `i`. Como cada linha recebe
+no máximo uma rainha, conflitos de linha já são evitados por
+construção. O método `successors()` só gera os sucessores em que a
+nova rainha não ataca nenhuma das já colocadas (mesma coluna ou mesma
+diagonal) — é esse filtro que poda os ramos inválidos da árvore de
+busca. Quem percorre essa árvore (empilhar, aprofundar e retroceder ao
+esvaziar um ramo) é o próprio `BuscaProfundidade` da aigyminsper.
 """
 
 import time
 
-
-def posicao_segura(posicoes, linha, coluna):
-    """Verifica se é seguro colocar uma rainha em (linha, coluna),
-    dado o que já foi colocado nas linhas anteriores (0..linha-1)."""
-    for linha_anterior in range(linha):
-        coluna_anterior = posicoes[linha_anterior]
-
-        # mesma coluna
-        if coluna_anterior == coluna:
-            return False
-
-        # mesma diagonal (principal ou secundária)
-        if abs(coluna_anterior - coluna) == abs(linha_anterior - linha):
-            return False
-
-    return True
+from aigyminsper.search.graph import State
+from aigyminsper.search.search_algorithms import BuscaProfundidade
 
 
-def dfs_n_rainhas(n, linha=0, posicoes=None, solucoes=None):
-    """Busca em profundidade (DFS) com backtracking para o problema das N-Rainhas.
+class NRainhasState(State):
+    """Estado do problema das N-Rainhas: tabuleiro parcial N x N.
 
-    Parâmetros:
-        n         -- dimensão do tabuleiro (n x n) e número de rainhas
-        linha     -- linha atual sendo preenchida (usado na recursão)
-        posicoes  -- lista parcial de posições das rainhas (usado na recursão)
-        solucoes  -- lista acumuladora de todas as soluções encontradas
-
-    Retorna:
-        lista de soluções, cada uma sendo uma lista `posicoes` completa
-        (posicoes[i] = coluna da rainha na linha i)
+    `posicoes` é uma tupla em que `posicoes[i]` é a coluna da rainha
+    colocada na linha `i` (linhas de 0 até len(posicoes) - 1).
     """
-    if posicoes is None:
-        posicoes = []
-    if solucoes is None:
-        solucoes = []
 
-    # Caso base: todas as linhas foram preenchidas com sucesso -> solução válida
-    if linha == n:
-        solucoes.append(posicoes.copy())
-        return solucoes
+    def __init__(self, n, posicoes=(), operator=""):
+        super().__init__(operator)
+        self.n = n
+        self.posicoes = posicoes
 
-    # Tenta colocar a rainha da linha atual em cada coluna possível
-    for coluna in range(n):
-        if posicao_segura(posicoes, linha, coluna):
-            posicoes.append(coluna)          # escolhe
-            dfs_n_rainhas(n, linha + 1, posicoes, solucoes)  # aprofunda (DFS)
-            posicoes.pop()                   # backtrack (desfaz a escolha)
+    def _segura(self, coluna):
+        """Verifica se colocar uma rainha na próxima linha, na coluna
+        informada, não gera conflito."""
+        linha = len(self.posicoes)
+        for linha_anterior, coluna_anterior in enumerate(self.posicoes):
+            mesma_coluna = coluna_anterior == coluna
+            mesma_diagonal = abs(coluna_anterior - coluna) == abs(linha_anterior - linha)
+            if mesma_coluna or mesma_diagonal:
+                return False
+        return True
 
-    return solucoes
+    def successors(self):
+        linha = len(self.posicoes)
+        estados_sucessores = []
+        for coluna in range(self.n):
+            if self._segura(coluna):
+                novas_posicoes = self.posicoes + (coluna,)
+                operador = f"rainha da linha {linha} na coluna {coluna}"
+                estados_sucessores.append(NRainhasState(self.n, novas_posicoes, operador))
+        return estados_sucessores
+
+    def is_goal(self):
+        return len(self.posicoes) == self.n
+
+    def description(self):
+        return f"Problema das {self.n}-Rainhas"
+
+    def cost(self):
+        return 1
+
+    def env(self):
+        return str(self.posicoes)
 
 
 def imprimir_tabuleiro(posicoes, n):
-    """Imprime uma representação visual do tabuleiro para uma solução."""
     for linha in range(n):
         linha_str = ""
         for coluna in range(n):
@@ -81,23 +74,27 @@ def imprimir_tabuleiro(posicoes, n):
 
 def main():
     tamanhos = [4, 5, 6, 7, 8]
+    algoritmo = BuscaProfundidade()
 
-    print("Problema das N-Rainhas — Busca em Profundidade (DFS/backtracking)")
-    print("=" * 65)
+    print("Problema das N-Rainhas — Busca em Profundidade")
+    print("=" * 79)
 
     for n in tamanhos:
+        estado_inicial = NRainhasState(n)
         inicio = time.time()
-        solucoes = dfs_n_rainhas(n)
+        solucao = algoritmo.search(estado_inicial, m=n, pruning="without")
         duracao = time.time() - inicio
 
         print(f"\nTabuleiro {n}x{n}")
-        print(f"  Total de soluções encontradas: {len(solucoes)}")
-        print(f"  Tempo de execução: {duracao:.4f} s")
+        if solucao is None:
+            print("  Nenhuma solução encontrada.")
+            continue
 
-        if solucoes:
-            print("  Exemplo de solução (posições por linha):", solucoes[0])
-            print("  Representação visual:\n")
-            imprimir_tabuleiro(solucoes[0], n)
+        posicoes = solucao.state.posicoes
+        print(f"  Solução (posições por linha): {list(posicoes)}")
+        print(f"  Tempo de execução: {duracao:.4f} s")
+        print("  Representação visual:\n")
+        imprimir_tabuleiro(posicoes, n)
 
 
 if __name__ == "__main__":
